@@ -36,11 +36,10 @@ ACCESSORY_TERMS = (
 )
 
 NON_CONSOLE_TERMS = (
-    # Jogos e mídias para PS5 também aparecem na busca, mas não são consoles.
+    # Jogos e mídias para PS5 também aparecem nas buscas.
     "jogo", "jogos", "game", "games", "midia fisica", "midia digital",
     "expedition", "chronicle", "tactics", "far cry", "tekken", "bramble",
-    "fifa", "futebol", "aventura", "missao", "multiplayer",
-    "edicao fisica", "colecionador",
+    "fifa", "futebol", "multiplayer", "edicao fisica", "colecionador",
 )
 
 SOLD_OUT_TERMS = (
@@ -55,31 +54,31 @@ def normalize(value: str) -> str:
     return re.sub(r"\s+", " ", value.lower()).strip()
 
 def is_target_console(title: str) -> bool:
-    name = normalize(title)
+    # Remove símbolos como ® e padroniza espaços, hífens e barras.
+    name = re.sub(r"[^a-z0-9]+", " ", normalize(title)).strip()
 
-    # Excluir o PS5 Pro mesmo se outras palavras-chave estiverem presentes.
-    if re.search(r"\\bps[\\s-]*5[\\s-]*pro\\b|\\bplay[\\s-]*station[\\s-]*5[\\s-]*pro\\b|\\bplaystation[\\s-]*5[\\s-]*pro\\b|\\bplay[\\s-]*5[\\s-]*pro\\b", name):
+    # O PS5 Pro nunca deve gerar alerta.
+    if re.search(r"\\b(?:ps|playstation|play station|play)\\s*5\\s*pro\\b", name):
         return False
 
-    # Menções a PS5 em acessórios ou jogos não significam que o item seja um console.
+    # Uma menção a PS5 em jogos ou acessórios não identifica um console.
     if any(term in name for term in ACCESSORY_TERMS + NON_CONSOLE_TERMS):
         return False
 
     has_playstation_5 = bool(
-        re.search(r"\\bps[\\s-]*5\\b", name)
-        or re.search(r"\\bplay[\\s-]*station[\\s-]*5\\b", name)
-        or re.search(r"\\bplaystation5\\b", name)
-        or re.search(r"\\bsony\\s+(?:playstation|ps)\\s*5?\\b", name)
+        re.search(r"\\bps\\s*5\\b", name)
+        or re.search(r"\\bplaystation\\s*5\\b", name)
+        or re.search(r"\\bplay\\s*station\\s*5\\b", name)
+        or re.search(r"\\bplay\\s*5\\b", name)
     )
     if not has_playstation_5:
         return False
 
-    # Exigir indicação de que o item é o aparelho, não apenas algo compatível com PS5.
-    has_console_indicator = bool(
+    # Aceita títulos com "Console" ou identificação comum de modelo do aparelho.
+    return bool(
         re.search(r"\\bconsole\\b", name)
         or re.search(r"\\b(slim|fat|digital|disc|825\\s?gb|1\\s?tb)\\b", name)
     )
-    return has_console_indicator
 
 def extract_price(text: str) -> str:
     matches = re.findall(r"R\$\s*[\d.]+,\d{2}", text or "")
@@ -167,42 +166,49 @@ async def collect_catalog_products(page) -> dict:
 
 
 async def collect_search_products(page) -> dict:
-    """Coleta produtos encontrados pela busca interna, incluindo páginas mpage."""
+    """Coleta produtos pelas buscas PS5 e Console, percorrendo as páginas."""
     found = {}
-    for search_page in range(1, 6):
-        url = f"{BASE_URL}/search/?q=ps5&mpage={search_page}"
-        try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=60000)
-            await page.wait_for_timeout(1000)
-            items = await page.locator('a[href*="/produtos/"]').evaluate_all(
-                """els => els.map(a => {
-                    const image = a.querySelector('img');
-                    const card = a.closest('article, li, [class*="product"], [class*="item"]') || a.parentElement;
-                    return {
-                        href: a.href,
-                        title: (a.innerText || a.getAttribute('title') ||
-                                a.getAttribute('aria-label') || image?.alt ||
-                                card?.innerText || '').trim()
-                    };
-                })"""
-            )
-            count_before = len(found)
-            for item in items:
-                href = (item.get("href") or "").split("#")[0].split("?")[0]
-                path = urlparse(href).path.rstrip("/")
-                if not href or not path.startswith("/produtos/") or path == "/produtos":
-                    continue
-                title = re.sub(r"\\s+", " ", item.get("title") or "").strip()
-                if not title:
-                    title = path.rsplit("/", 1)[-1].replace("-", " ")
-                found[href] = title
-            logger.info("Busca PS5 página %d: %d produtos coletados.",
-                        search_page, len(found) - count_before)
-            if len(found) == count_before and search_page > 1:
+    for query in ("ps5", "console"):
+        query_count = 0
+        for search_page in range(1, 11):
+            url = f"{BASE_URL}/search/?q={query}&mpage={search_page}"
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                await page.wait_for_timeout(1000)
+                items = await page.locator('a[href*="/produtos/"]').evaluate_all(
+                    """els => els.map(a => {
+                        const image = a.querySelector('img');
+                        const card = a.closest('article, li, [class*="product"], [class*="item"]') || a.parentElement;
+                        return {
+                            href: a.href,
+                            title: (a.innerText || a.getAttribute('title') ||
+                                    a.getAttribute('aria-label') || image?.alt ||
+                                    card?.innerText || '').trim()
+                        };
+                    })"""
+                )
+                page_count = 0
+                for item in items:
+                    href = (item.get("href") or "").split("#")[0].split("?")[0]
+                    path = urlparse(href).path.rstrip("/")
+                    if not href or not path.startswith("/produtos/") or path == "/produtos":
+                        continue
+                    title = re.sub(r"\s+", " ", item.get("title") or "").strip()
+                    if not title:
+                        title = path.rsplit("/", 1)[-1].replace("-", " ")
+                    if href not in found:
+                        page_count += 1
+                    found[href] = title
+                query_count += page_count
+                logger.info("Busca %s página %d: %d novos produtos coletados.",
+                            query.upper(), search_page, page_count)
+                if page_count == 0:
+                    break
+            except Exception as exc:
+                logger.warning("Falha ao consultar busca %s página %d: %s",
+                               query.upper(), search_page, exc)
                 break
-        except Exception as exc:
-            logger.warning("Falha ao consultar busca PS5 página %d: %s", search_page, exc)
-            break
+        logger.info("Busca %s: %d produtos únicos coletados.", query.upper(), query_count)
     return found
 
 async def inspect_product(browser, url: str, catalog_title: str) -> dict:
