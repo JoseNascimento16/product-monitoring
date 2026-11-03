@@ -1,0 +1,54 @@
+name: Monitorar PS5
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ps5-stock-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Baixar o repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Instalar dependências
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Verificar produtos
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          STATE_FILE: data/state.json
+          LOG_LEVEL: INFO
+          MAX_LOAD_MORE_CLICKS: "40"
+        run: python run_once.py
+
+      - name: Salvar estado para a próxima execução
+        if: always()
+        run: |
+          if [ -f data/state.json ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -f data/state.json
+            if ! git diff --cached --quiet; then
+              git commit -m "Atualizar estado do monitor"
+              git push
+            fi
+          fi
