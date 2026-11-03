@@ -27,11 +27,20 @@ logging.basicConfig(
 logger = logging.getLogger("product-monitor")
 
 ACCESSORY_TERMS = (
-    "controle", "controller", "headset", "fone", "carregador", "cabo",
-    "base carregadora", "suporte", "capa", "case", "pelicula", "skin",
-    "volante", "adaptador", "bateria", "dock",
-    "camera", "bolsa", "mochila", "adesivo", "protetor",
-    "peca de reposicao",
+    # Acessórios e periféricos: nunca devem gerar alerta de console.
+    "controle", "controller", "dualsense", "headset", "fone", "carregador",
+    "cabo", "base carregadora", "suporte", "capa", "case", "pelicula", "skin",
+    "volante", "adaptador", "dongle", "conversor", "bateria", "dock",
+    "camera", "bolsa", "mochila", "adesivo", "protetor", "peca de reposicao",
+    "teclado", "mouse", "hub", "receptor", "transmissor",
+)
+
+NON_CONSOLE_TERMS = (
+    # Jogos e mídias para PS5 também aparecem na busca, mas não são consoles.
+    "jogo", "jogos", "game", "games", "midia fisica", "midia digital",
+    "expedition", "chronicle", "tactics", "far cry", "tekken", "bramble",
+    "fifa", "futebol", "aventura", "missao", "multiplayer",
+    "edicao fisica", "colecionador",
 )
 
 SOLD_OUT_TERMS = (
@@ -49,20 +58,28 @@ def is_target_console(title: str) -> bool:
     name = normalize(title)
 
     # Excluir o PS5 Pro mesmo se outras palavras-chave estiverem presentes.
-    if re.search(r"\bps[\s-]*5[\s-]*pro\b|\bplay[\s-]*station[\s-]*5[\s-]*pro\b|\bplaystation[\s-]*5[\s-]*pro\b|\bplay[\s-]*5[\s-]*pro\b", name):
+    if re.search(r"\\bps[\\s-]*5[\\s-]*pro\\b|\\bplay[\\s-]*station[\\s-]*5[\\s-]*pro\\b|\\bplaystation[\\s-]*5[\\s-]*pro\\b|\\bplay[\\s-]*5[\\s-]*pro\\b", name):
         return False
 
-    has_console_name = bool(
-        re.search(r"\bps\s*5\b", name)
-        or re.search(r"\bplay\s*station\s*5\b", name)
-        or re.search(r"\bplay\s*5\b", name)
-        or re.search(r"\bplaystation5\b", name)
-        or re.search(r"\bsony\s+(?:playstation|ps)\s*5?\b", name)
+    # Menções a PS5 em acessórios ou jogos não significam que o item seja um console.
+    if any(term in name for term in ACCESSORY_TERMS + NON_CONSOLE_TERMS):
+        return False
+
+    has_playstation_5 = bool(
+        re.search(r"\\bps[\\s-]*5\\b", name)
+        or re.search(r"\\bplay[\\s-]*station[\\s-]*5\\b", name)
+        or re.search(r"\\bplaystation5\\b", name)
+        or re.search(r"\\bsony\\s+(?:playstation|ps)\\s*5?\\b", name)
     )
-    if not has_console_name:
+    if not has_playstation_5:
         return False
 
-    return not any(term in name for term in ACCESSORY_TERMS)
+    # Exigir indicação de que o item é o aparelho, não apenas algo compatível com PS5.
+    has_console_indicator = bool(
+        re.search(r"\\bconsole\\b", name)
+        or re.search(r"\\b(slim|fat|digital|disc|825\\s?gb|1\\s?tb)\\b", name)
+    )
+    return has_console_indicator
 
 def extract_price(text: str) -> str:
     matches = re.findall(r"R\$\s*[\d.]+,\d{2}", text or "")
