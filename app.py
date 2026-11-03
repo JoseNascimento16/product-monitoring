@@ -58,7 +58,7 @@ def is_target_console(title: str) -> bool:
     name = re.sub(r"[^a-z0-9]+", " ", normalize(title)).strip()
 
     # O PS5 Pro nunca deve gerar alerta.
-    if re.search(r"\\b(?:ps|playstation|play station|play)\\s*5\\s*pro\\b", name):
+    if re.search(r"\b(?:ps|playstation|play station|play)\s*5\s*pro\\b", name):
         return False
 
     # Uma menção a PS5 em jogos ou acessórios não identifica um console.
@@ -66,18 +66,18 @@ def is_target_console(title: str) -> bool:
         return False
 
     has_playstation_5 = bool(
-        re.search(r"\\bps\\s*5\\b", name)
-        or re.search(r"\\bplaystation\\s*5\\b", name)
-        or re.search(r"\\bplay\\s*station\\s*5\\b", name)
-        or re.search(r"\\bplay\\s*5\\b", name)
+        re.search(r"\bps\s*5\\b", name)
+        or re.search(r"\bplaystation\s*5\\b", name)
+        or re.search(r"\bplay\s*station\s*5\\b", name)
+        or re.search(r"\bplay\s*5\\b", name)
     )
     if not has_playstation_5:
         return False
 
     # Aceita títulos com "Console" ou identificação comum de modelo do aparelho.
     return bool(
-        re.search(r"\\bconsole\\b", name)
-        or re.search(r"\\b(slim|fat|digital|disc|825\\s?gb|1\\s?tb)\\b", name)
+        re.search(r"\bconsole\\b", name)
+        or re.search(r"\b(slim|fat|digital|disc|825\s?gb|1\s?tb)\\b", name)
     )
 
 def extract_price(text: str) -> str:
