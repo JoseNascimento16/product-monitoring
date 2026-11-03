@@ -148,6 +148,46 @@ async def collect_catalog_products(page) -> dict:
             seen[href] = title
     return seen
 
+
+async def collect_search_products(page) -> dict:
+    """Coleta produtos encontrados pela busca interna, incluindo páginas mpage."""
+    found = {}
+    for search_page in range(1, 6):
+        url = f"{BASE_URL}/search/?q=ps5&mpage={search_page}"
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            await page.wait_for_timeout(1000)
+            items = await page.locator('a[href*="/produtos/"]').evaluate_all(
+                """els => els.map(a => {
+                    const image = a.querySelector('img');
+                    const card = a.closest('article, li, [class*="product"], [class*="item"]') || a.parentElement;
+                    return {
+                        href: a.href,
+                        title: (a.innerText || a.getAttribute('title') ||
+                                a.getAttribute('aria-label') || image?.alt ||
+                                card?.innerText || '').trim()
+                    };
+                })"""
+            )
+            count_before = len(found)
+            for item in items:
+                href = (item.get("href") or "").split("#")[0].split("?")[0]
+                path = urlparse(href).path.rstrip("/")
+                if not href or not path.startswith("/produtos/") or path == "/produtos":
+                    continue
+                title = re.sub(r"\\s+", " ", item.get("title") or "").strip()
+                if not title:
+                    title = path.rsplit("/", 1)[-1].replace("-", " ")
+                found[href] = title
+            logger.info("Busca PS5 página %d: %d produtos coletados.",
+                        search_page, len(found) - count_before)
+            if len(found) == count_before and search_page > 1:
+                break
+        except Exception as exc:
+            logger.warning("Falha ao consultar busca PS5 página %d: %s", search_page, exc)
+            break
+    return found
+
 async def inspect_product(browser, url: str, catalog_title: str) -> dict:
     page = await browser.new_page()
     try:
@@ -198,8 +238,15 @@ async def monitor_cycle(browser, state: dict) -> None:
     finally:
         await page.close()
 
+    search_page = await browser.new_page()
+    try:
+        search_products = await collect_search_products(search_page)
+    finally:
+        await search_page.close()
+    catalog.update(search_products)
+
     targets = {url: title for url, title in catalog.items() if is_target_console(title)}
-    logger.info("Catálogo: %d links de produto; %d candidatos PS5 (exceto Pro).",
+    logger.info("Total: %d links entre catálogo e busca; %d candidatos PS5 (exceto Pro).",
                 len(catalog), len(targets))
 
     for url, catalog_title in targets.items():
