@@ -208,10 +208,10 @@ async def monitor_cycle(browser, state: dict) -> None:
             previous = bool(state.get(url, {}).get("in_stock", False))
             if product["in_stock"] and not previous:
                 message = (
-                    "🎮 <b>PS5 disponível na Às Vezes Tem!</b>\\n\\n"
-                    f"<b>Produto:</b> {html.escape(product['title'])}\\n"
-                    f"<b>Preço:</b> {html.escape(product['price'])}\\n"
-                    f"<b>Indício:</b> {html.escape(product['evidence'])}\\n\\n"
+                    "🎮 <b>PS5 disponível na Às Vezes Tem!</b>\n\n"
+                    f"<b>Produto:</b> {html.escape(product['title'])}\n"
+                    f"<b>Preço:</b> {html.escape(product['price'])}\n"
+                    f"<b>Indício:</b> {html.escape(product['evidence'])}\n\n"
                     f'<a href="{html.escape(url, quote=True)}">Ver produto na loja</a>'
                 )
                 # Só registra como alertado depois que o Telegram confirmar o envio.
