@@ -83,8 +83,7 @@ def save_state(state: dict) -> None:
 
 def send_telegram_message(message: str) -> None:
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        logger.warning("Telegram ainda não configurado; alerta apenas registrado no log.")
-        return
+        raise RuntimeError("Configure TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID antes de iniciar o monitor.")
     response = requests.post(
         f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
         json={
@@ -179,7 +178,7 @@ async def inspect_product(browser, url: str, catalog_title: str) -> dict:
             if buy_available:
                 break
 
-        in_stock = last_piece or (buy_available and not sold_out)
+        in_stock = not sold_out and (last_piece or buy_available)
         return {
             "title": title,
             "price": extract_price(body),
@@ -206,6 +205,18 @@ async def monitor_cycle(browser, state: dict) -> None:
         try:
             product = await inspect_product(browser, url, catalog_title)
             previous = bool(state.get(url, {}).get("in_stock", False))
+            if product["in_stock"] and not previous:
+                message = (
+                    "🎮 <b>PS5 disponível na Às Vezes Tem!</b>\\n\\n"
+                    f"<b>Produto:</b> {html.escape(product['title'])}\\n"
+                    f"<b>Preço:</b> {html.escape(product['price'])}\\n"
+                    f"<b>Indício:</b> {html.escape(product['evidence'])}\\n\\n"
+                    f'<a href="{html.escape(url, quote=True)}">Ver produto na loja</a>'
+                )
+                # Só registra como alertado depois que o Telegram confirmar o envio.
+                send_telegram_message(message)
+                logger.info("Novo alerta: %s", product["title"])
+
             state[url] = {
                 "title": product["title"],
                 "in_stock": product["in_stock"],
@@ -213,17 +224,7 @@ async def monitor_cycle(browser, state: dict) -> None:
             }
             save_state(state)
 
-            if product["in_stock"] and not previous:
-                message = (
-                    "🎮 <b>PS5 disponível na Às Vezes Tem!</b>\n\n"
-                    f"<b>Produto:</b> {html.escape(product['title'])}\n"
-                    f"<b>Preço:</b> {html.escape(product['price'])}\n"
-                    f"<b>Indício:</b> {html.escape(product['evidence'])}\n\n"
-                    f'<a href="{html.escape(url, quote=True)}">Ver produto na loja</a>'
-                )
-                send_telegram_message(message)
-                logger.info("Novo alerta: %s", product["title"])
-            else:
+            if not (product["in_stock"] and not previous):
                 logger.info("%s | disponível=%s | %s",
                             product["title"], product["in_stock"], product["evidence"])
         except Exception:
