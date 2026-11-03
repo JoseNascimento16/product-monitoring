@@ -29,13 +29,14 @@ logger = logging.getLogger("product-monitor")
 ACCESSORY_TERMS = (
     "controle", "controller", "headset", "fone", "carregador", "cabo",
     "base carregadora", "suporte", "capa", "case", "pelicula", "skin",
-    "jogo", "midia", "volante", "adaptador", "bateria", "dock",
+    "volante", "adaptador", "bateria", "dock",
     "camera", "bolsa", "mochila", "adesivo", "protetor",
     "peca de reposicao",
 )
 
 SOLD_OUT_TERMS = (
-    "produto esgotado", "produto indisponivel", "sem estoque",
+    "produto esgotado", "produto indisponivel", "esgotado", "sem estoque",
+    "nao temos mais estoque",
     "avise-me quando chegar", "nao temos estoque", "indisponivel no momento",
 )
 
@@ -48,7 +49,7 @@ def is_target_console(title: str) -> bool:
     name = normalize(title)
 
     # Excluir o PS5 Pro mesmo se outras palavras-chave estiverem presentes.
-    if re.search(r"\bps\s*5\s*pro\b|\bplay\s*station\s*5\s*pro\b|\bplaystation\s*5\s*pro\b|\bplay\s*5\s*pro\b", name):
+    if re.search(r"\bps[\s-]*5[\s-]*pro\b|\bplay[\s-]*station[\s-]*5[\s-]*pro\b|\bplaystation[\s-]*5[\s-]*pro\b|\bplay[\s-]*5[\s-]*pro\b", name):
         return False
 
     has_console_name = bool(
